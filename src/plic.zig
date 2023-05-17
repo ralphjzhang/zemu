@@ -25,7 +25,7 @@ pub const Plic = struct {
         allocator.destroy(self);
     }
 
-    pub fn load(self: *Self, addr: u64, size: u64) Result {
+    pub fn load(self: *Self, addr: u64, comptime size: u8) Result {
         if (size == 32) {
             return switch (addr) {
                 pending_addr => .{ .result = self.pending },
@@ -37,7 +37,7 @@ pub const Plic = struct {
         } else return .{ .exception = Exception.load_access_fault };
     }
 
-    pub fn store(self: *Self, addr: u64, size: u64, value: u64) Exception {
+    pub fn store(self: *Self, addr: u64, comptime size: u8, value: u64) ?Exception {
         if (size == 32) {
             switch (addr) {
                 pending_addr => self.pending = value,
@@ -46,7 +46,7 @@ pub const Plic = struct {
                 sclaim_addr => self.sclaim = value,
                 else => {},
             }
-            return Exception.ok;
+            return null;
         } else return Exception.store_amo_access_fault;
     }
 };
@@ -70,13 +70,13 @@ test "plic load & store" {
     try expect(plic.load(Plic.sclaim_addr, 32).result == 44);
     // store
     try expect(plic.store(Plic.pending_addr, 33, 0) == Exception.store_amo_access_fault);
-    try expect(plic.store(424242, 32, 0) == Exception.ok);
-    try expect(plic.store(Plic.pending_addr, 32, 1111) == Exception.ok);
+    try expect(plic.store(424242, 32, 0) == null);
+    try expect(plic.store(Plic.pending_addr, 32, 1111) == null);
     try expect(plic.load(Plic.pending_addr, 32).result == 1111);
-    try expect(plic.store(Plic.senable_addr, 32, 2222) == Exception.ok);
+    try expect(plic.store(Plic.senable_addr, 32, 2222) == null);
     try expect(plic.load(Plic.senable_addr, 32).result == 2222);
-    try expect(plic.store(Plic.spriority_addr, 32, 3333) == Exception.ok);
+    try expect(plic.store(Plic.spriority_addr, 32, 3333) == null);
     try expect(plic.load(Plic.spriority_addr, 32).result == 3333);
-    try expect(plic.store(Plic.sclaim_addr, 32, 4444) == Exception.ok);
+    try expect(plic.store(Plic.sclaim_addr, 32, 4444) == null);
     try expect(plic.load(Plic.sclaim_addr, 32).result == 4444);
 }

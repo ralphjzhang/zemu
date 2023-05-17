@@ -34,7 +34,7 @@ pub const Dram = struct {
         };
     }
 
-    pub fn store(self: *Self, addr: u64, comptime size: u8, value: u64) Exception {
+    pub fn store(self: *Self, addr: u64, comptime size: u8, value: u64) ?Exception {
         const index = addr - dram_base;
         return switch (size) {
             8 => store_impl(1, self.data, index, value),
@@ -54,11 +54,11 @@ inline fn load_impl(comptime bytes: u8, data: []u8, index: u64) u64 {
     return ret;
 }
 
-inline fn store_impl(comptime bytes: u8, data: []u8, index: u64, value: u64) Exception {
+inline fn store_impl(comptime bytes: u8, data: []u8, index: u64, value: u64) ?Exception {
     inline for (0..bytes) |i| {
         data[index + i] = @intCast(u8, (value >> i * 8) & 0xFF);
     }
-    return Exception.ok;
+    return null;
 }
 
 test "dram load & store" {
@@ -76,18 +76,18 @@ test "dram load & store" {
     try expect(load_impl(4, &data, 4) == 0x8070605);
     try expect(load_impl(8, &data, 0) == 0x807060504030201);
     // store_impl
-    try expect(store_impl(1, &data, 0, 9) == Exception.ok);
+    try expect(store_impl(1, &data, 0, 9) == null);
     try expect(load_impl(1, &data, 0) == 9);
     try expect(load_impl(2, &data, 0) == 0x209);
     try expect(load_impl(4, &data, 0) == 0x4030209);
     try expect(load_impl(8, &data, 0) == 0x807060504030209);
-    try expect(store_impl(2, &data, 0, 0xA0B) == Exception.ok);
+    try expect(store_impl(2, &data, 0, 0xA0B) == null);
     try expect(load_impl(2, &data, 0) == 0xA0B);
     try expect(load_impl(8, &data, 0) == 0x807060504030A0B);
-    try expect(store_impl(4, &data, 0, 0xA0B0C0D) == Exception.ok);
+    try expect(store_impl(4, &data, 0, 0xA0B0C0D) == null);
     try expect(load_impl(2, &data, 2) == 0xA0B);
     try expect(load_impl(8, &data, 0) == 0x80706050A0B0C0D);
-    try expect(store_impl(8, &data, 0, 0x8090A0B0C0D0E0F) == Exception.ok);
+    try expect(store_impl(8, &data, 0, 0x8090A0B0C0D0E0F) == null);
     try expect(load_impl(1, &data, 0) == 0xF);
     try expect(load_impl(8, &data, 0) == 0x8090A0B0C0D0E0F);
 
@@ -103,12 +103,12 @@ test "dram load & store" {
     try expect(dram.load(Dram.dram_base, 64).result == 0x807060504030201);
     try expect(dram.load(Dram.dram_base, 9).exception == Exception.load_access_fault);
     const addr = Dram.dram_base + 0x1000;
-    try expect(dram.store(addr, 8, 0x42) == Exception.ok);
+    try expect(dram.store(addr, 8, 0x42) == null);
     try expect(dram.load(addr, 8).result == 0x42);
-    try expect(dram.store(addr, 16, 0x1234) == Exception.ok);
+    try expect(dram.store(addr, 16, 0x1234) == null);
     try expect(dram.load(addr, 16).result == 0x1234);
-    try expect(dram.store(addr, 32, 0x12345678) == Exception.ok);
+    try expect(dram.store(addr, 32, 0x12345678) == null);
     try expect(dram.load(addr, 32).result == 0x12345678);
-    try expect(dram.store(addr, 64, 0x12345678ABCDEF0) == Exception.ok);
+    try expect(dram.store(addr, 64, 0x12345678ABCDEF0) == null);
     try expect(dram.load(addr, 64).result == 0x12345678ABCDEF0);
 }

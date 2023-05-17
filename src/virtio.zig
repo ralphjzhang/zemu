@@ -22,8 +22,8 @@ pub const Virtio = struct {
     const queue_notify_addr = virtio_base + 0x050;
     const status_addr = virtio_base + 0x070;
 
-    const vring_desc_size = 16;
-    const desc_num = 8;
+    pub const vring_desc_size = 16;
+    pub const desc_num = 8;
 
     const virtio_irq = 1;
     const uart_irq = 10;
@@ -48,7 +48,7 @@ pub const Virtio = struct {
         allocator.destroy(self);
     }
 
-    pub fn load(self: *Self, addr: u64, size: u64) Result {
+    pub fn load(self: *Self, addr: u64, comptime size: u8) Result {
         if (size == 32) {
             return switch (addr) {
                 magic_addr => .{ .result = 0x74726976 },
@@ -65,7 +65,7 @@ pub const Virtio = struct {
         } else return .{ .exception = Exception.load_access_fault };
     }
 
-    pub fn store(self: *Self, addr: u64, size: u64, value: u32) Exception {
+    pub fn store(self: *Self, addr: u64, comptime size: u8, value: u32) ?Exception {
         if (size == 32) {
             switch (addr) {
                 device_features_addr => self.driver_features = value,
@@ -77,7 +77,7 @@ pub const Virtio = struct {
                 status_addr => self.status = value,
                 else => {},
             }
-            return Exception.ok;
+            return null;
         } else return Exception.store_amo_access_fault;
     }
 
@@ -126,21 +126,21 @@ test "virtio" {
     try expect(virtio.load(Virtio.queue_num_max_addr, 32).result == 8);
     // store
     try expect(virtio.store(Virtio.magic_addr, 33, 0) == Exception.store_amo_access_fault);
-    try expect(virtio.store(424242, 32, 0) == Exception.ok);
-    try expect(virtio.store(Virtio.device_features_addr, 32, 111) == Exception.ok);
+    try expect(virtio.store(424242, 32, 0) == null);
+    try expect(virtio.store(Virtio.device_features_addr, 32, 111) == null);
     try expect(virtio.load(Virtio.driver_features_addr, 32).result == 111);
-    try expect(virtio.store(Virtio.guest_page_size_addr, 32, 222) == Exception.ok);
+    try expect(virtio.store(Virtio.guest_page_size_addr, 32, 222) == null);
     try expect(virtio.load(Virtio.guest_page_size_addr, 32).result == 0);
     try expect(virtio.page_size == 222);
-    try expect(virtio.store(Virtio.queue_sel_addr, 32, 333) == Exception.ok);
+    try expect(virtio.store(Virtio.queue_sel_addr, 32, 333) == null);
     try expect(virtio.load(Virtio.queue_sel_addr, 32).result == 0);
     try expect(virtio.queue_sel == 333);
-    try expect(virtio.store(Virtio.queue_pfn_addr, 32, 444) == Exception.ok);
+    try expect(virtio.store(Virtio.queue_pfn_addr, 32, 444) == null);
     try expect(virtio.load(Virtio.queue_pfn_addr, 32).result == 444);
-    try expect(virtio.store(Virtio.queue_notify_addr, 32, 555) == Exception.ok);
+    try expect(virtio.store(Virtio.queue_notify_addr, 32, 555) == null);
     try expect(virtio.load(Virtio.queue_notify_addr, 32).result == 0);
     try expect(virtio.queue_notify == 555);
-    try expect(virtio.store(Virtio.status_addr, 32, 666) == Exception.ok);
+    try expect(virtio.store(Virtio.status_addr, 32, 666) == null);
     try expect(virtio.load(Virtio.status_addr, 32).result == 666);
     // isInterrupting
     _ = virtio.store(Virtio.queue_notify_addr, 32, 555);

@@ -1,5 +1,4 @@
-pub const Exception = enum(i8) {
-    ok = -1,
+pub const Exception = enum(u8) {
     instruction_address_misaligned = 0,
     illegal_instruction,
     breakpoint,
@@ -21,7 +20,7 @@ pub const Exception = enum(i8) {
     }
 };
 
-pub const Result = union {
+pub const Result = union(enum) {
     result: u64,
     exception: Exception,
 };

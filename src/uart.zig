@@ -48,7 +48,7 @@ pub const Uart = struct {
         }
     }
 
-    pub fn load(self: *Self, addr: u64, size: u64) Result {
+    pub fn load(self: *Self, addr: u64, comptime size: u8) Result {
         if (size == 8) {
             self.lock.lock();
             defer self.lock.unlock();
@@ -63,19 +63,16 @@ pub const Uart = struct {
         } else return .{ .exception = Exception.load_access_fault };
     }
 
-    pub fn store(self: *Self, addr: u64, size: u64, value: u8) Exception {
+    pub fn store(self: *Self, addr: u64, comptime size: u8, value: u8) ?Exception {
         if (size == 8) {
             self.lock.lock();
             defer self.lock.unlock();
             switch (addr) {
-                rhr_addr => {
-                    std.c.printf("%c", value & 0xFF);
-                    std.c.fflush(std.c.stdio);
-                },
+                rhr_addr => _ = std.os.write(std.os.STDOUT_FILENO, &[_]u8{value & 0xFF}) catch unreachable, // TODO good?
                 else => self.data[addr - uart_base] = value & 0xFF,
             }
-            return Exception.ok;
-        } else return .{ .exception = Exception.store_amo_access_fault };
+            return null;
+        } else return Exception.store_amo_access_fault;
     }
 
     pub fn interrupting(self: *Self) bool {
