@@ -1,11 +1,13 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
-const Exception = @import("./exception.zig").Exception;
+const common = @import("./common.zig");
+const Exception = common.Exception;
+const Result = common.Result;
 
-const Clint = struct {
+pub const Clint = struct {
     const Self = @This();
-    const clint_base = 0x2000000;
-    const clint_size = 0x10000;
+    pub const clint_base = 0x2000000;
+    pub const clint_size = 0x10000;
     const mtimecmp_addr = clint_base + 0x4000;
     const mtime_addr = clint_base + 0xbff8;
 
@@ -20,7 +22,7 @@ const Clint = struct {
         allocator.destroy(self);
     }
 
-    pub fn load(self: *Self, addr: u64, size: u64) union { result: u64, exception: Exception } {
+    pub fn load(self: *Self, addr: u64, size: u64) Result {
         if (size == 64) {
             return switch (addr) {
                 mtimecmp_addr => .{ .result = self.mtimecmp },

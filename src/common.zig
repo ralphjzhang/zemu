@@ -20,3 +20,8 @@ pub const Exception = enum(i8) {
         };
     }
 };
+
+pub const Result = union {
+    result: u64,
+    exception: Exception,
+};

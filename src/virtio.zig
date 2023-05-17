@@ -1,11 +1,13 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
-const Exception = @import("./exception.zig").Exception;
+const common = @import("./common.zig");
+const Exception = common.Exception;
+const Result = common.Result;
 
-const Virtio = struct {
+pub const Virtio = struct {
     const Self = @This();
-    const virtio_base = 0x10001000;
-    const virtio_size = 0x1000;
+    pub const virtio_base = 0x10001000;
+    pub const virtio_size = 0x1000;
     const magic_addr = virtio_base + 0x000;
     const version_addr = virtio_base + 0x004;
     const device_id_addr = virtio_base + 0x008;
@@ -46,7 +48,7 @@ const Virtio = struct {
         allocator.destroy(self);
     }
 
-    pub fn load(self: *Self, addr: u64, size: u64) union { result: u64, exception: Exception } {
+    pub fn load(self: *Self, addr: u64, size: u64) Result {
         if (size == 32) {
             return switch (addr) {
                 magic_addr => .{ .result = 0x74726976 },

@@ -1,11 +1,13 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
-const Exception = @import("./exception.zig").Exception;
+const common = @import("./common.zig");
+const Exception = common.Exception;
+const Result = common.Result;
 
-const Uart = struct {
+pub const Uart = struct {
     const Self = @This();
-    const uart_base = 0x10000000;
-    const uart_size = 0x100;
+    pub const uart_base = 0x10000000;
+    pub const uart_size = 0x100;
     const rhr_addr = uart_base + 0;
     const thr_addr = uart_base + 0;
     const lcr_addr = uart_base + 3;
@@ -46,14 +48,14 @@ const Uart = struct {
         }
     }
 
-    pub fn load(self: *Self, addr: u64, size: u64) union { result: u64, exception: Exception } {
+    pub fn load(self: *Self, addr: u64, size: u64) Result {
         if (size == 8) {
             self.lock.lock();
             defer self.lock.unlock();
             switch (addr) {
                 rhr_addr => {
                     self.cond.broadcast();
-                    self.data[lsr_addr - uart_base] &= ~lsr_rx;
+                    self.data[lsr_addr - uart_base] &= ~@as(u8, lsr_rx);
                     return .{ .result = 0 };
                 },
                 else => return .{ .result = self.data[addr - uart_base] },

@@ -1,10 +1,12 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
-const Exception = @import("./exception.zig").Exception;
+const common = @import("./common.zig");
+const Exception = common.Exception;
+const Result = common.Result;
 
-const Dram = struct {
-    const dram_size = 1024 * 1024 * 128;
-    const dram_base = 0x80000000;
+pub const Dram = struct {
+    pub const dram_size = 1024 * 1024 * 128;
+    pub const dram_base = 0x80000000;
     const Self = @This();
 
     data: []u8,
@@ -21,7 +23,7 @@ const Dram = struct {
         allocator.destroy(self);
     }
 
-    pub fn load(self: *Self, addr: u64, comptime size: u8) union { result: u64, exception: Exception } {
+    pub fn load(self: *Self, addr: u64, comptime size: u8) Result {
         const index = addr - dram_base;
         return switch (size) {
             8 => .{ .result = load_impl(1, self.data, index) },

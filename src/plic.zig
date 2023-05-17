@@ -1,11 +1,13 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
-const Exception = @import("./exception.zig").Exception;
+const common = @import("./common.zig");
+const Exception = common.Exception;
+const Result = common.Result;
 
-const Plic = struct {
+pub const Plic = struct {
     const Self = @This();
-    const plic_base = 0xc000000;
-    const plic_size = 0x4000000;
+    pub const plic_base = 0xc000000;
+    pub const plic_size = 0x4000000;
     const pending_addr = plic_base + 0x1000;
     const senable_addr = plic_base + 0x2000;
     const spriority_addr = plic_base + 0x201000;
@@ -23,7 +25,7 @@ const Plic = struct {
         allocator.destroy(self);
     }
 
-    pub fn load(self: *Self, addr: u64, size: u64) union { result: u64, exception: Exception } {
+    pub fn load(self: *Self, addr: u64, size: u64) Result {
         if (size == 32) {
             return switch (addr) {
                 pending_addr => .{ .result = self.pending },
