@@ -1,8 +1,5 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
-const common = @import("./common.zig");
-const Exception = common.Exception;
-const Result = common.Result;
 
 pub const Virtio = struct {
     const Self = @This();
@@ -48,26 +45,27 @@ pub const Virtio = struct {
         allocator.destroy(self);
     }
 
-    pub fn load(self: *Self, addr: u64, comptime size: u8) Result {
-        if (size == 32) {
-            return switch (addr) {
-                magic_addr => .{ .result = 0x74726976 },
-                version_addr => .{ .result = 0x1 },
-                device_id_addr => .{ .result = 0x2 },
-                vendor_id_addr => .{ .result = 0x554d4551 },
-                device_features_addr => .{ .result = 0 },
-                driver_features_addr => .{ .result = self.driver_features },
-                queue_num_max_addr => .{ .result = 8 },
-                queue_pfn_addr => .{ .result = self.queue_pfn },
-                status_addr => .{ .result = self.status },
-                else => .{ .result = 0 },
-            };
-        } else return .{ .exception = Exception.load_access_fault };
+    pub fn load(self: *Self, comptime ResultType: type, addr: u64) ResultType {
+        return switch (ResultType) {
+            u32 => switch (addr) {
+                magic_addr => 0x74726976,
+                version_addr => 0x1,
+                device_id_addr => 0x2,
+                vendor_id_addr => 0x554d4551,
+                device_features_addr => 0,
+                driver_features_addr => self.driver_features,
+                queue_num_max_addr => 8,
+                queue_pfn_addr => self.queue_pfn,
+                status_addr => self.status,
+                else => 0,
+            },
+            else => unreachable,
+        };
     }
 
-    pub fn store(self: *Self, addr: u64, comptime size: u8, value: u32) ?Exception {
-        if (size == 32) {
-            switch (addr) {
+    pub fn store(self: *Self, comptime ValueType: type, addr: u64, value: ValueType) void {
+        switch (ValueType) {
+            u32 => switch (addr) {
                 device_features_addr => self.driver_features = value,
                 guest_page_size_addr => self.page_size = value,
                 queue_sel_addr => self.queue_sel = value,
@@ -76,9 +74,9 @@ pub const Virtio = struct {
                 queue_notify_addr => self.queue_notify = value,
                 status_addr => self.status = value,
                 else => {},
-            }
-            return null;
-        } else return Exception.store_amo_access_fault;
+            },
+            else => unreachable,
+        }
     }
 
     pub fn isInterrupting(self: *Self) bool {
@@ -116,40 +114,36 @@ test "virtio" {
     var virtio = try Virtio.create(allocator, &disk);
     defer virtio.destroy(allocator);
     // load
-    try expect(virtio.load(Virtio.magic_addr, 33).exception == Exception.load_access_fault);
-    try expect(virtio.load(424242, 32).result == 0);
-    try expect(virtio.load(Virtio.magic_addr, 32).result == 0x74726976);
-    try expect(virtio.load(Virtio.version_addr, 32).result == 0x1);
-    try expect(virtio.load(Virtio.device_id_addr, 32).result == 0x2);
-    try expect(virtio.load(Virtio.vendor_id_addr, 32).result == 0x554d4551);
-    try expect(virtio.load(Virtio.device_features_addr, 32).result == 0);
-    try expect(virtio.load(Virtio.queue_num_max_addr, 32).result == 8);
+    try expect(virtio.load(u32, Virtio.magic_addr) == 0x74726976);
+    try expect(virtio.load(u32, Virtio.version_addr) == 0x1);
+    try expect(virtio.load(u32, Virtio.device_id_addr) == 0x2);
+    try expect(virtio.load(u32, Virtio.vendor_id_addr) == 0x554d4551);
+    try expect(virtio.load(u32, Virtio.device_features_addr) == 0);
+    try expect(virtio.load(u32, Virtio.queue_num_max_addr) == 8);
     // store
-    try expect(virtio.store(Virtio.magic_addr, 33, 0) == Exception.store_amo_access_fault);
-    try expect(virtio.store(424242, 32, 0) == null);
-    try expect(virtio.store(Virtio.device_features_addr, 32, 111) == null);
-    try expect(virtio.load(Virtio.driver_features_addr, 32).result == 111);
-    try expect(virtio.store(Virtio.guest_page_size_addr, 32, 222) == null);
-    try expect(virtio.load(Virtio.guest_page_size_addr, 32).result == 0);
+    virtio.store(u32, Virtio.device_features_addr, 111);
+    try expect(virtio.load(u32, Virtio.driver_features_addr) == 111);
+    virtio.store(u32, Virtio.guest_page_size_addr, 222);
+    try expect(virtio.load(u32, Virtio.guest_page_size_addr) == 0);
     try expect(virtio.page_size == 222);
-    try expect(virtio.store(Virtio.queue_sel_addr, 32, 333) == null);
-    try expect(virtio.load(Virtio.queue_sel_addr, 32).result == 0);
+    virtio.store(u32, Virtio.queue_sel_addr, 333);
+    try expect(virtio.load(u32, Virtio.queue_sel_addr) == 0);
     try expect(virtio.queue_sel == 333);
-    try expect(virtio.store(Virtio.queue_pfn_addr, 32, 444) == null);
-    try expect(virtio.load(Virtio.queue_pfn_addr, 32).result == 444);
-    try expect(virtio.store(Virtio.queue_notify_addr, 32, 555) == null);
-    try expect(virtio.load(Virtio.queue_notify_addr, 32).result == 0);
+    virtio.store(u32, Virtio.queue_pfn_addr, 444);
+    try expect(virtio.load(u32, Virtio.queue_pfn_addr) == 444);
+    virtio.store(u32, Virtio.queue_notify_addr, 555);
+    try expect(virtio.load(u32, Virtio.queue_notify_addr) == 0);
     try expect(virtio.queue_notify == 555);
-    try expect(virtio.store(Virtio.status_addr, 32, 666) == null);
-    try expect(virtio.load(Virtio.status_addr, 32).result == 666);
+    virtio.store(u32, Virtio.status_addr, 666);
+    try expect(virtio.load(u32, Virtio.status_addr) == 666);
     // isInterrupting
-    _ = virtio.store(Virtio.queue_notify_addr, 32, 555);
+    virtio.store(u32, Virtio.queue_notify_addr, 555);
     try expect(virtio.isInterrupting() == true);
     try expect(virtio.queue_notify == 0xFFFF_FFFF);
     try expect(virtio.isInterrupting() == false);
     // descAddr
-    _ = virtio.store(Virtio.queue_pfn_addr, 32, 6);
-    _ = virtio.store(Virtio.guest_page_size_addr, 32, 7);
+    virtio.store(u32, Virtio.queue_pfn_addr, 6);
+    virtio.store(u32, Virtio.guest_page_size_addr, 7);
     try expect(virtio.descAddr() == 42); // 6 * 7
     // disk read/write
     try expect(virtio.diskRead(0) == 0);

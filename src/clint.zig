@@ -1,8 +1,5 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
-const common = @import("./common.zig");
-const Exception = common.Exception;
-const Result = common.Result;
 
 pub const Clint = struct {
     const Self = @This();
@@ -22,25 +19,26 @@ pub const Clint = struct {
         allocator.destroy(self);
     }
 
-    pub fn load(self: *Self, addr: u64, comptime size: u8) Result {
-        if (size == 64) {
-            return switch (addr) {
-                mtimecmp_addr => .{ .result = self.mtimecmp },
-                mtime_addr => .{ .result = self.mtime },
-                else => .{ .result = 0 },
-            };
-        } else return .{ .exception = Exception.load_access_fault };
+    pub fn load(self: *Self, comptime ResultType: type, addr: u64) ResultType {
+        return switch (ResultType) {
+            u64 => switch (addr) {
+                mtimecmp_addr => self.mtimecmp,
+                mtime_addr => self.mtime,
+                else => 0,
+            },
+            else => unreachable,
+        };
     }
 
-    pub fn store(self: *Self, addr: u64, comptime size: u8, value: u64) ?Exception {
-        if (size == 64) {
-            switch (addr) {
+    pub fn store(self: *Self, comptime ValueType: type, addr: u64, value: ValueType) void {
+        switch (ValueType) {
+            u64 => switch (addr) {
                 mtimecmp_addr => self.mtimecmp = value,
                 mtime_addr => self.mtime = value,
                 else => {},
-            }
-            return null;
-        } else return Exception.store_amo_access_fault;
+            },
+            else => unreachable,
+        }
     }
 };
 
@@ -53,15 +51,11 @@ test "clint load & store" {
     clint.mtimecmp = 42;
     clint.mtime = 24;
     // load
-    try expect(clint.load(Clint.mtime_addr, 63).exception == Exception.load_access_fault);
-    try expect(clint.load(424242, 64).result == 0);
-    try expect(clint.load(Clint.mtimecmp_addr, 64).result == 42);
-    try expect(clint.load(Clint.mtime_addr, 64).result == 24);
+    try expect(clint.load(u64, Clint.mtimecmp_addr) == 42);
+    try expect(clint.load(u64, Clint.mtime_addr) == 24);
     // store
-    try expect(clint.store(Clint.mtime_addr, 63, 42) == Exception.store_amo_access_fault);
-    try expect(clint.store(424242, 64, 42) == null);
-    try expect(clint.store(Clint.mtime_addr, 64, 88) == null);
-    try expect(clint.load(Clint.mtime_addr, 64).result == 88);
-    try expect(clint.store(Clint.mtimecmp_addr, 64, 99) == null);
-    try expect(clint.load(Clint.mtimecmp_addr, 64).result == 99);
+    clint.store(u64, Clint.mtime_addr, 88);
+    try expect(clint.load(u64, Clint.mtime_addr) == 88);
+    clint.store(u64, Clint.mtimecmp_addr, 99);
+    try expect(clint.load(u64, Clint.mtimecmp_addr) == 99);
 }

@@ -1,8 +1,5 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
-const common = @import("./common.zig");
-const Exception = common.Exception;
-const Result = common.Result;
 
 pub const Dram = struct {
     pub const dram_size = 1024 * 1024 * 128;
@@ -23,42 +20,37 @@ pub const Dram = struct {
         allocator.destroy(self);
     }
 
-    pub fn load(self: *Self, addr: u64, comptime size: u8) Result {
+    pub fn load(self: *Self, comptime ResultType: type, addr: u64) ResultType {
         const index = addr - dram_base;
-        return switch (size) {
-            8 => .{ .result = load_impl(1, self.data, index) },
-            16 => .{ .result = load_impl(2, self.data, index) },
-            32 => .{ .result = load_impl(4, self.data, index) },
-            64 => .{ .result = load_impl(8, self.data, index) },
-            else => .{ .exception = Exception.load_access_fault },
+        return switch (ResultType) {
+            u8, u16, u32, u64 => load_impl(ResultType, self.data, index),
+            else => unreachable,
         };
     }
 
-    pub fn store(self: *Self, addr: u64, comptime size: u8, value: u64) ?Exception {
+    pub fn store(self: *Self, comptime ValueType: type, addr: u64, value: ValueType) void {
         const index = addr - dram_base;
-        return switch (size) {
-            8 => store_impl(1, self.data, index, value),
-            16 => store_impl(2, self.data, index, value),
-            32 => store_impl(4, self.data, index, value),
-            64 => store_impl(8, self.data, index, value),
-            else => Exception.store_amo_access_fault,
+        return switch (ValueType) {
+            u8, u16, u32, u64 => store_impl(ValueType, self.data, index, value),
+            else => unreachable,
         };
     }
 };
 
-inline fn load_impl(comptime bytes: u8, data: []u8, index: u64) u64 {
+inline fn load_impl(comptime ResultType: type, data: []u8, index: u64) ResultType {
     var ret: u64 = 0;
-    inline for (0..bytes) |i| {
+    const size = @sizeOf(ResultType);
+    inline for (0..size) |i| {
         ret |= @as(u64, data[index + i]) << i * 8;
     }
-    return ret;
+    return @truncate(ResultType, ret);
 }
 
-inline fn store_impl(comptime bytes: u8, data: []u8, index: u64, value: u64) ?Exception {
-    inline for (0..bytes) |i| {
+inline fn store_impl(comptime ValueType: type, data: []u8, index: u64, value: ValueType) void {
+    const size = @sizeOf(ValueType);
+    inline for (0..size) |i| {
         data[index + i] = @intCast(u8, (value >> i * 8) & 0xFF);
     }
-    return null;
 }
 
 test "dram load & store" {
@@ -66,30 +58,30 @@ test "dram load & store" {
 
     var data = [_]u8{ 1, 2, 3, 4, 5, 6, 7, 8 };
     // load_impl
-    try expect(load_impl(1, &data, 0) == 1);
-    try expect(load_impl(1, &data, 4) == 5);
-    try expect(load_impl(1, &data, 7) == 8);
-    try expect(load_impl(2, &data, 0) == 0x201);
-    try expect(load_impl(2, &data, 4) == 0x605);
-    try expect(load_impl(2, &data, 6) == 0x807);
-    try expect(load_impl(4, &data, 0) == 0x4030201);
-    try expect(load_impl(4, &data, 4) == 0x8070605);
-    try expect(load_impl(8, &data, 0) == 0x807060504030201);
+    try expect(load_impl(u8, &data, 0) == 1);
+    try expect(load_impl(u8, &data, 4) == 5);
+    try expect(load_impl(u8, &data, 7) == 8);
+    try expect(load_impl(u16, &data, 0) == 0x201);
+    try expect(load_impl(u16, &data, 4) == 0x605);
+    try expect(load_impl(u16, &data, 6) == 0x807);
+    try expect(load_impl(u32, &data, 0) == 0x4030201);
+    try expect(load_impl(u32, &data, 4) == 0x8070605);
+    try expect(load_impl(u64, &data, 0) == 0x807060504030201);
     // store_impl
-    try expect(store_impl(1, &data, 0, 9) == null);
-    try expect(load_impl(1, &data, 0) == 9);
-    try expect(load_impl(2, &data, 0) == 0x209);
-    try expect(load_impl(4, &data, 0) == 0x4030209);
-    try expect(load_impl(8, &data, 0) == 0x807060504030209);
-    try expect(store_impl(2, &data, 0, 0xA0B) == null);
-    try expect(load_impl(2, &data, 0) == 0xA0B);
-    try expect(load_impl(8, &data, 0) == 0x807060504030A0B);
-    try expect(store_impl(4, &data, 0, 0xA0B0C0D) == null);
-    try expect(load_impl(2, &data, 2) == 0xA0B);
-    try expect(load_impl(8, &data, 0) == 0x80706050A0B0C0D);
-    try expect(store_impl(8, &data, 0, 0x8090A0B0C0D0E0F) == null);
-    try expect(load_impl(1, &data, 0) == 0xF);
-    try expect(load_impl(8, &data, 0) == 0x8090A0B0C0D0E0F);
+    store_impl(u8, &data, 0, 9);
+    try expect(load_impl(u8, &data, 0) == 9);
+    try expect(load_impl(u16, &data, 0) == 0x209);
+    try expect(load_impl(u32, &data, 0) == 0x4030209);
+    try expect(load_impl(u64, &data, 0) == 0x807060504030209);
+    store_impl(u16, &data, 0, 0xA0B);
+    try expect(load_impl(u16, &data, 0) == 0xA0B);
+    try expect(load_impl(u64, &data, 0) == 0x807060504030A0B);
+    store_impl(u32, &data, 0, 0xA0B0C0D);
+    try expect(load_impl(u16, &data, 2) == 0xA0B);
+    try expect(load_impl(u64, &data, 0) == 0x80706050A0B0C0D);
+    store_impl(u64, &data, 0, 0x8090A0B0C0D0E0F);
+    try expect(load_impl(u8, &data, 0) == 0xF);
+    try expect(load_impl(u64, &data, 0) == 0x8090A0B0C0D0E0F);
 
     data = [_]u8{ 1, 2, 3, 4, 5, 6, 7, 8 };
     var code = [_]u8{0};
@@ -97,18 +89,17 @@ test "dram load & store" {
     var dram = try Dram.create(allocator, &code);
     defer dram.destroy(allocator);
     std.mem.copy(u8, dram.data, &data);
-    try expect(dram.load(Dram.dram_base, 8).result == 1);
-    try expect(dram.load(Dram.dram_base, 16).result == 0x201);
-    try expect(dram.load(Dram.dram_base, 32).result == 0x4030201);
-    try expect(dram.load(Dram.dram_base, 64).result == 0x807060504030201);
-    try expect(dram.load(Dram.dram_base, 9).exception == Exception.load_access_fault);
+    try expect(dram.load(u8, Dram.dram_base) == 1);
+    try expect(dram.load(u16, Dram.dram_base) == 0x201);
+    try expect(dram.load(u32, Dram.dram_base) == 0x4030201);
+    try expect(dram.load(u64, Dram.dram_base) == 0x807060504030201);
     const addr = Dram.dram_base + 0x1000;
-    try expect(dram.store(addr, 8, 0x42) == null);
-    try expect(dram.load(addr, 8).result == 0x42);
-    try expect(dram.store(addr, 16, 0x1234) == null);
-    try expect(dram.load(addr, 16).result == 0x1234);
-    try expect(dram.store(addr, 32, 0x12345678) == null);
-    try expect(dram.load(addr, 32).result == 0x12345678);
-    try expect(dram.store(addr, 64, 0x12345678ABCDEF0) == null);
-    try expect(dram.load(addr, 64).result == 0x12345678ABCDEF0);
+    dram.store(u8, addr, 0x42);
+    try expect(dram.load(u8, addr) == 0x42);
+    dram.store(u16, addr, 0x1234);
+    try expect(dram.load(u16, addr) == 0x1234);
+    dram.store(u32, addr, 0x12345678);
+    try expect(dram.load(u32, addr) == 0x12345678);
+    dram.store(u64, addr, 0x12345678ABCDEF0);
+    try expect(dram.load(u64, addr) == 0x12345678ABCDEF0);
 }

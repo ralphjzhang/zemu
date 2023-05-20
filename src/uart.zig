@@ -1,8 +1,5 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
-const common = @import("./common.zig");
-const Exception = common.Exception;
-const Result = common.Result;
 
 pub const Uart = struct {
     const Self = @This();
@@ -48,31 +45,36 @@ pub const Uart = struct {
         }
     }
 
-    pub fn load(self: *Self, addr: u64, comptime size: u8) Result {
-        if (size == 8) {
-            self.lock.lock();
-            defer self.lock.unlock();
-            switch (addr) {
-                rhr_addr => {
-                    self.cond.broadcast();
-                    self.data[lsr_addr - uart_base] &= ~@as(u8, lsr_rx);
-                    return .{ .result = 0 };
-                },
-                else => return .{ .result = self.data[addr - uart_base] },
-            }
-        } else return .{ .exception = Exception.load_access_fault };
+    pub fn load(self: *Self, comptime ResultType: type, addr: u64) ResultType {
+        switch (ResultType) {
+            u8 => {
+                self.lock.lock();
+                defer self.lock.unlock();
+                switch (addr) {
+                    rhr_addr => {
+                        self.cond.broadcast();
+                        self.data[lsr_addr - uart_base] &= ~@as(u8, lsr_rx);
+                        return 0;
+                    },
+                    else => return self.data[addr - uart_base],
+                }
+            },
+            else => unreachable,
+        }
     }
 
-    pub fn store(self: *Self, addr: u64, comptime size: u8, value: u8) ?Exception {
-        if (size == 8) {
-            self.lock.lock();
-            defer self.lock.unlock();
-            switch (addr) {
-                rhr_addr => _ = std.os.write(std.os.STDOUT_FILENO, &[_]u8{value & 0xFF}) catch unreachable, // TODO good?
-                else => self.data[addr - uart_base] = value & 0xFF,
-            }
-            return null;
-        } else return Exception.store_amo_access_fault;
+    pub fn store(self: *Self, comptime ValueType: type, addr: u64, value: ValueType) void {
+        switch (ValueType) {
+            u8 => {
+                self.lock.lock();
+                defer self.lock.unlock();
+                switch (addr) {
+                    rhr_addr => _ = std.os.write(std.os.STDOUT_FILENO, &[_]u8{value & 0xFF}) catch unreachable, // TODO good?
+                    else => self.data[addr - uart_base] = value & 0xFF,
+                }
+            },
+            else => unreachable,
+        }
     }
 
     pub fn interrupting(self: *Self) bool {

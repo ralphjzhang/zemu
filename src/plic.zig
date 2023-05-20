@@ -1,8 +1,5 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
-const common = @import("./common.zig");
-const Exception = common.Exception;
-const Result = common.Result;
 
 pub const Plic = struct {
     const Self = @This();
@@ -25,29 +22,30 @@ pub const Plic = struct {
         allocator.destroy(self);
     }
 
-    pub fn load(self: *Self, addr: u64, comptime size: u8) Result {
-        if (size == 32) {
-            return switch (addr) {
-                pending_addr => .{ .result = self.pending },
-                senable_addr => .{ .result = self.senable },
-                spriority_addr => .{ .result = self.spriority },
-                sclaim_addr => .{ .result = self.sclaim },
-                else => .{ .result = 0 },
-            };
-        } else return .{ .exception = Exception.load_access_fault };
+    pub fn load(self: *Self, comptime ResultType: type, addr: u64) ResultType {
+        return switch (ResultType) {
+            u32 => @truncate(u32, switch (addr) {
+                pending_addr => self.pending,
+                senable_addr => self.senable,
+                spriority_addr => self.spriority,
+                sclaim_addr => self.sclaim,
+                else => 0,
+            }),
+            else => unreachable,
+        };
     }
 
-    pub fn store(self: *Self, addr: u64, comptime size: u8, value: u64) ?Exception {
-        if (size == 32) {
-            switch (addr) {
+    pub fn store(self: *Self, comptime ValueType: type, addr: u64, value: ValueType) void {
+        switch (ValueType) {
+            u32 => switch (addr) {
                 pending_addr => self.pending = value,
                 senable_addr => self.senable = value,
                 spriority_addr => self.spriority = value,
                 sclaim_addr => self.sclaim = value,
                 else => {},
-            }
-            return null;
-        } else return Exception.store_amo_access_fault;
+            },
+            else => unreachable,
+        }
     }
 };
 
@@ -62,21 +60,17 @@ test "plic load & store" {
     plic.spriority = 33;
     plic.sclaim = 44;
     // load
-    try expect(plic.load(Plic.pending_addr, 33).exception == Exception.load_access_fault);
-    try expect(plic.load(424242, 32).result == 0);
-    try expect(plic.load(Plic.pending_addr, 32).result == 11);
-    try expect(plic.load(Plic.senable_addr, 32).result == 22);
-    try expect(plic.load(Plic.spriority_addr, 32).result == 33);
-    try expect(plic.load(Plic.sclaim_addr, 32).result == 44);
+    try expect(plic.load(u32, Plic.pending_addr) == 11);
+    try expect(plic.load(u32, Plic.senable_addr) == 22);
+    try expect(plic.load(u32, Plic.spriority_addr) == 33);
+    try expect(plic.load(u32, Plic.sclaim_addr) == 44);
     // store
-    try expect(plic.store(Plic.pending_addr, 33, 0) == Exception.store_amo_access_fault);
-    try expect(plic.store(424242, 32, 0) == null);
-    try expect(plic.store(Plic.pending_addr, 32, 1111) == null);
-    try expect(plic.load(Plic.pending_addr, 32).result == 1111);
-    try expect(plic.store(Plic.senable_addr, 32, 2222) == null);
-    try expect(plic.load(Plic.senable_addr, 32).result == 2222);
-    try expect(plic.store(Plic.spriority_addr, 32, 3333) == null);
-    try expect(plic.load(Plic.spriority_addr, 32).result == 3333);
-    try expect(plic.store(Plic.sclaim_addr, 32, 4444) == null);
-    try expect(plic.load(Plic.sclaim_addr, 32).result == 4444);
+    plic.store(u32, Plic.pending_addr, 1111);
+    try expect(plic.load(u32, Plic.pending_addr) == 1111);
+    plic.store(u32, Plic.senable_addr, 2222);
+    try expect(plic.load(u32, Plic.senable_addr) == 2222);
+    plic.store(u32, Plic.spriority_addr, 3333);
+    try expect(plic.load(u32, Plic.spriority_addr) == 3333);
+    plic.store(u32, Plic.sclaim_addr, 4444);
+    try expect(plic.load(u32, Plic.sclaim_addr) == 4444);
 }

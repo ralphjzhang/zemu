@@ -3,4 +3,7 @@ zig-cache/*
 zig-out
 zig-out/*
 zemu.code-workspace
+playground.zig
+playground.c
+a.out
 

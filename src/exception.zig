@@ -1,5 +1,6 @@
 pub const Exception = enum(u8) {
     instruction_address_misaligned = 0,
+    instruction_access_fault,
     illegal_instruction,
     breakpoint,
     load_address_misaligned,
@@ -7,6 +8,7 @@ pub const Exception = enum(u8) {
     store_amo_address_misaligned,
     store_amo_access_fault,
     ecall_from_umode,
+    ecall_from_smode,
     ecall_from_mmode = 11,
     instruction_page_fault,
     load_page_fault,
@@ -18,9 +20,4 @@ pub const Exception = enum(u8) {
             else => false,
         };
     }
-};
-
-pub const Result = union(enum) {
-    result: u64,
-    exception: Exception,
 };
