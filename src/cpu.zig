@@ -123,15 +123,12 @@ pub const Cpu = struct {
         };
     }
 
-    pub fn fetch(self: *Self) union { instruction: u32, exception: Exception } {
+    pub fn fetch(self: *Self) union(enum) { instruction: u32, exception: Exception } {
         var ppc = switch (self.translate(self.pc, Exception.instruction_page_fault)) {
             .exception => |e| return .{ .exception = e },
             .address => |addr| addr,
         };
-        return switch (self.bus.load(u32, ppc)) {
-            .exception => Exception.instruction_access_fault,
-            .instruction => |val| val,
-        };
+        return .{ .instruction = self.bus.load(u32, ppc) };
     }
 
     fn getCsr(self: *Self, addr: Csr) u64 {
@@ -515,12 +512,12 @@ pub const Cpu = struct {
     }
 
     pub fn dumpRegisters(self: *Self) void {
-        const abi = [32][]u8{
+        const abi = [32][]const u8{
             "zero", " ra ", " sp ", " gp ", " tp ", " t0 ", " t1 ", " t2 ", " s0 ", " s1 ", " a0 ",
             " a1 ", " a2 ", " a3 ", " a4 ", " a5 ", " a6 ", " a7 ", " s2 ", " s3 ", " s4 ", " s5 ",
             " s6 ", " s7 ", " s8 ", " s9 ", " s10", " s11", " t3 ", " t4 ", " t5 ", " t6 ",
         };
-        var i = 0;
+        var i: usize = 0;
         const print = std.debug.print;
         while (i < 32) : (i += 4) {
             print("{}-{s}=0x{x}", .{ i + 0, abi[i + 0], self.regs[i + 0] });
@@ -530,12 +527,17 @@ pub const Cpu = struct {
         }
     }
 
-    pub fn takeTrap(self: *Self, exception: Exception, interrupt: ?Interrupt) void {
+    pub fn takeTrap(self: *Self, exception: ?Exception, interrupt: ?Interrupt) void {
         const exception_pc = self.pc - 4;
         const prev_mode = self.mode;
         const _1: u64 = 1;
         const _3: u64 = 3;
-        const cause = if (interrupt != null) @enumToInt(interrupt.?) else @enumToInt(exception);
+        const cause = if (interrupt != null)
+            @enumToInt(interrupt.?)
+        else if (exception != null)
+            @enumToInt(exception.?)
+        else
+            return;
 
         const medeleg = self.loadCsr(Csr.medeleg);
         if (prev_mode != .machine and (medeleg >> cause) & 1 != 0) {
