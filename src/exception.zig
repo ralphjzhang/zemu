@@ -1,4 +1,4 @@
-pub const Exception = enum(u8) {
+pub const Exception = enum(u4) {
     instruction_address_misaligned = 0,
     instruction_access_fault,
     illegal_instruction,
@@ -22,8 +22,7 @@ pub const Exception = enum(u8) {
     }
 };
 
-pub const Interrupt = enum(i8) {
-    none = -1,
+pub const Interrupt = enum(u4) {
     user_software_interrupt = 0,
     supervisor_software_interrupt = 1,
     machine_software_interrupt = 3,

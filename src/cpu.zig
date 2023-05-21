@@ -189,6 +189,7 @@ pub const Cpu = struct {
         const rs2 = @truncate(u5, (inst >> 20));
         const funct3: u3 = @truncate(u3, (inst >> 12));
         const funct7: u7 = @truncate(u7, (inst >> 25));
+        const _1: u64 = 1;
 
         self.regs[0] = 0; // x0 register is always 0
         switch (opcode) {
@@ -441,27 +442,28 @@ pub const Cpu = struct {
                         } else if (rs2 == 0x2 and funct7 == 0x8) { // sret
                             self.pc = self.loadCsr(Csr.sepc);
                             const sstatus = self.loadCsr(Csr.sstatus);
-                            const spp = (sstatus >> 8) & 1;
-                            self.mode = if (spp == 1) .supervisor else .user;
-                            const spie = (sstatus >> 5) & 1;
-                            const _1: u64 = 1;
-                            var new_sstatus = if (spie == 1) sstatus | (_1 << 1) else sstatus & ~(_1 << 1);
+                            self.mode = if (((sstatus >> 8) & _1) == 1) .supervisor else .user; // spp
+                            var new_sstatus = if (((sstatus >> 5) & _1) == 1) // spie
+                                sstatus | (_1 << 1)
+                            else
+                                sstatus & ~(_1 << 1);
                             new_sstatus = new_sstatus | (_1 << 5); // spie
                             new_sstatus = new_sstatus & ~(_1 << 8); // spp
                             self.storeCsr(Csr.sstatus, new_sstatus);
                         } else if (rs2 == 0x2 and funct7 == 0x18) { // mret
                             self.pc = self.loadCsr(Csr.sepc);
                             const mstatus = self.loadCsr(Csr.mstatus);
-                            const mpp = (mstatus >> 11) & 3;
+                            const _3: u64 = 3;
+                            const mpp = (mstatus >> 11) & _3;
                             self.mode = switch (mpp) {
                                 2 => .machine,
                                 1 => .supervisor,
                                 else => .user,
                             };
-                            const mpie = (mstatus >> 7) & 1;
-                            const _1: u64 = 1;
-                            const _3: u64 = 3;
-                            var new_mstatus = if (mpie == 1) mstatus | (_1 << 3) else mstatus & ~(_1 << 3);
+                            var new_mstatus = if (((mstatus >> 7) & _1) == 1) // mpie
+                                mstatus | (_1 << 3)
+                            else
+                                mstatus & ~(_1 << 3);
                             new_mstatus = new_mstatus | (_1 << 7); // mpie
                             new_mstatus = new_mstatus & ~(_3 << 11); // mpp
                             self.storeCsr(Csr.mstatus, new_mstatus);
@@ -528,16 +530,62 @@ pub const Cpu = struct {
         }
     }
 
-    pub fn takeTrap(self: *Self, exception: Exception, interrupt: Interrupt) void {
-        _ = interrupt;
-        _ = exception;
-        _ = self;
+    pub fn takeTrap(self: *Self, exception: Exception, interrupt: ?Interrupt) void {
+        const exception_pc = self.pc - 4;
+        const prev_mode = self.mode;
+        const _1: u64 = 1;
+        const _3: u64 = 3;
+        const cause = if (interrupt != null) @enumToInt(interrupt.?) else @enumToInt(exception);
+
+        const medeleg = self.loadCsr(Csr.medeleg);
+        if (prev_mode != .machine and (medeleg >> cause) & 1 != 0) {
+            self.mode = .supervisor;
+            const stvec = self.loadCsr(Csr.stvec);
+            if (interrupt != null) {
+                const vec = if ((stvec & 1) == 1) 4 * cause else 0;
+                self.pc = (stvec & ~_1) + vec;
+            } else {
+                self.pc = stvec & ~_1;
+            }
+            self.storeCsr(Csr.sepc, exception_pc & ~_1);
+            self.storeCsr(Csr.scause, cause);
+            self.storeCsr(Csr.stval, 0);
+            const sstatus = self.loadCsr(Csr.sstatus);
+            const new_sstatus = if (((sstatus >> 1) & 1) == 1)
+                sstatus | (_1 << 5)
+            else
+                sstatus & ~(_1 << 5);
+            self.storeCsr(Csr.sstatus, new_sstatus & ~(_1 << 1));
+            if (prev_mode == .user)
+                self.storeCsr(Csr.sstatus, sstatus & ~(_1 << 8))
+            else
+                self.storeCsr(Csr.sstatus, sstatus | (_1 << 8));
+        } else {
+            self.mode = .machine;
+            const mtvec = self.loadCsr(Csr.mtvec);
+            if (interrupt != null) {
+                const vec = if ((mtvec & 1) == 1) 4 * cause else 0;
+                self.pc = (mtvec & ~_1) + vec;
+            } else {
+                self.pc = mtvec & ~_1;
+            }
+            self.storeCsr(Csr.mepc, exception_pc & ~_1);
+            self.storeCsr(Csr.mcause, cause);
+            self.storeCsr(Csr.mtval, 0);
+            const mstatus = self.loadCsr(Csr.mstatus);
+            const new_mstatus = if (((mstatus >> 3) & 1) == 1)
+                mstatus | (_1 << 7)
+            else
+                mstatus & ~(_1 << 7);
+            self.storeCsr(Csr.mstatus, new_mstatus & ~(_1 << 3));
+            self.storeCsr(Csr.mstatus, new_mstatus & ~(_3 << 11));
+        }
     }
 
-    pub fn checkPendingInterrupt(self: *Self) Interrupt {
+    pub fn checkPendingInterrupt(self: *Self) ?Interrupt {
         switch (self.mode) {
-            .machine => if (((self.loadCsr(Csr.mstatus) >> 3) & 1) == 0) return .none,
-            .supervisor => if (((self.loadCsr(Csr.sstatus) >> 1) & 1) == 0) return .none,
+            .machine => if (((self.loadCsr(Csr.mstatus) >> 3) & 1) == 0) return null,
+            .supervisor => if (((self.loadCsr(Csr.sstatus) >> 1) & 1) == 0) return null,
             .user => {},
         }
 
@@ -579,7 +627,7 @@ pub const Cpu = struct {
             self.storeCsr(Csr.mip, self.loadCsr(Csr.mip) & ~mip_stip);
             return .supervisor_timer_interrupt;
         }
-        return .none;
+        return null;
     }
 };
 
@@ -601,6 +649,7 @@ test "cpu" {
     // _ = cpu.store(u64, 4242, 10);
     _ = cpu.execute(0);
     _ = cpu.checkPendingInterrupt();
+    cpu.takeTrap(Exception.illegal_instruction, Interrupt.machine_external_interrupt);
 
     var x: u64 = 0xFFFF_FFFF_FFFF_FFFF;
     const xx = @bitCast(i8, @truncate(u8, x));
