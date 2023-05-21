@@ -21,3 +21,16 @@ pub const Exception = enum(u8) {
         };
     }
 };
+
+pub const Interrupt = enum(i8) {
+    none = -1,
+    user_software_interrupt = 0,
+    supervisor_software_interrupt = 1,
+    machine_software_interrupt = 3,
+    user_timer_interrupt = 4,
+    supervisor_timer_interrupt = 5,
+    machine_timer_interrupt = 7,
+    user_external_interrupt = 8,
+    supervisor_external_interrupt = 9,
+    machine_external_interrupt = 11,
+};

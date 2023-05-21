@@ -5,10 +5,10 @@ pub const Plic = struct {
     const Self = @This();
     pub const plic_base = 0xc000000;
     pub const plic_size = 0x4000000;
-    const pending_addr = plic_base + 0x1000;
-    const senable_addr = plic_base + 0x2000;
-    const spriority_addr = plic_base + 0x201000;
-    const sclaim_addr = plic_base + 0x201004;
+    pub const pending_addr = plic_base + 0x1000;
+    pub const senable_addr = plic_base + 0x2000;
+    pub const spriority_addr = plic_base + 0x201000;
+    pub const sclaim_addr = plic_base + 0x201004;
 
     pending: u64,
     senable: u64,

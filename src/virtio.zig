@@ -22,8 +22,7 @@ pub const Virtio = struct {
     pub const vring_desc_size = 16;
     pub const desc_num = 8;
 
-    const virtio_irq = 1;
-    const uart_irq = 10;
+    pub const virtio_irq = 1;
 
     id: u64,
     driver_features: u32,

@@ -12,6 +12,8 @@ pub const Uart = struct {
     const lsr_rx = 1;
     const lsr_tx = 1 << 5;
 
+    pub const uart_irq = 10;
+
     data: [uart_size]u8,
     interrupting_: bool,
 
