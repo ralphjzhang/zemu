@@ -1,6 +1,7 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const Cpu = @import("./cpu.zig").Cpu;
+const Csr = @import("./cpu.zig").Csr;
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
@@ -17,11 +18,8 @@ pub fn main() !void {
 
     var binary = try readFile(allocator, args[1]);
     defer allocator.free(binary);
-    var image: []u8 = undefined;
-    if (args.len == 3) {
-        image = try readFile(allocator, args[2]);
-        defer allocator.free(image);
-    }
+    var image: []u8 = if (args.len == 3) try readFile(allocator, args[2]) else "";
+    defer if (image.len > 0) allocator.free(image);
 
     try runBinary(allocator, binary, image);
 }
@@ -37,8 +35,8 @@ fn runBinary(allocator: Allocator, binary: []u8, disk: []u8) !void {
                 if (exception.isFatal()) break;
             },
             .instruction => |inst| {
+                // debugCpu(cpu);
                 cpu.pc += 4;
-
                 if (cpu.execute(inst)) |exception| {
                     cpu.takeTrap(exception, null);
                     if (exception.isFatal()) break;
@@ -53,6 +51,15 @@ fn runBinary(allocator: Allocator, binary: []u8, disk: []u8) !void {
     cpu.dumpRegisters();
     std.debug.print("------------------------------------------------------------------------------\n", .{});
     cpu.dumpCsrs();
+}
+
+fn debugCpu(cpu: *Cpu) void {
+    std.debug.print("pc=0x{x}, sp=0x{x}, ra=0x{x}, mode={}\n", .{
+        cpu.pc,
+        cpu.regs[2],
+        cpu.regs[1],
+        cpu.mode,
+    });
 }
 
 fn readFile(allocator: Allocator, filename: []u8) ![]u8 {

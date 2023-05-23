@@ -8,33 +8,34 @@ const Virtio = @import("./virtio.zig").Virtio;
 const Uart = @import("./uart.zig").Uart;
 const Plic = @import("./plic.zig").Plic;
 
+pub const Csr = struct {
+    // machine level CSRs
+    pub const mstatus = 0x300;
+    pub const medeleg = 0x302;
+    pub const mideleg = 0x303;
+    pub const mie = 0x304;
+    pub const mtvec = 0x305;
+    pub const mepc = 0x341;
+    pub const mcause = 0x342;
+    pub const mtval = 0x343;
+    pub const mip = 0x344;
+    // supervisor level CSRs
+    pub const sstatus = 0x100;
+    pub const sie = 0x104;
+    pub const stvec = 0x105;
+    pub const sepc = 0x141;
+    pub const scause = 0x142;
+    pub const stval = 0x143;
+    pub const sip = 0x144;
+    pub const satp = 0x180;
+};
+
 pub const Cpu = struct {
     const Self = @This();
     const Mode = enum(u8) {
         user = 0x0,
         supervisor = 0x1,
         machine = 0x3,
-    };
-    const Csr = enum(u16) {
-        // machine level CSRs
-        mstatus = 0x300,
-        medeleg = 0x302,
-        mideleg = 0x303,
-        mie = 0x304,
-        mtvec = 0x305,
-        mepc = 0x341,
-        mcause = 0x342,
-        mtval = 0x343,
-        mip = 0x344,
-        // supervisor level CSRs
-        sstatus = 0x100,
-        sie = 0x104,
-        stvec = 0x105,
-        sepc = 0x141,
-        scause = 0x142,
-        stval = 0x143,
-        sip = 0x144,
-        satp = 0x180,
     };
     const mip_ssip = @as(u64, 1) << 1;
     const mip_msip = @as(u64, 1) << 3;
@@ -55,14 +56,16 @@ pub const Cpu = struct {
 
     pub fn create(allocator: Allocator, code: []u8, disk: []u8) !*Self {
         var self = try allocator.create(Cpu);
-        self.regs[2] = Dram.dram_base + Dram.dram_size;
+        self.regs = std.mem.zeroes(@TypeOf(self.regs));
+        self.csrs = std.mem.zeroes(@TypeOf(self.csrs));
+        self.regs[2] = Dram.dram_base + Dram.dram_size; // sp(x2) <- end of dram space
         self.bus = try Bus.create(
             allocator,
             try Dram.create(allocator, code),
             try Virtio.create(allocator, disk),
         );
         self.pc = Dram.dram_base;
-        self.mode = Mode.machine;
+        self.mode = .machine;
         return self;
     }
 
@@ -71,10 +74,12 @@ pub const Cpu = struct {
         allocator.destroy(self);
     }
 
-    pub fn updatePaging(self: *Self, csr_addr: Csr) void {
+    pub fn updatePaging(self: *Self, csr_addr: u12) void {
         if (csr_addr != Csr.satp) return;
-        self.pagetable = (self.loadCsr(Csr.satp) & ((@as(u64, 1) << 44) - 1)) * page_size;
-        const mode = self.loadCsr(Csr.satp) >> 60;
+        const satp = self.loadCsr(Csr.satp);
+        const _1: u64 = 1;
+        self.pagetable = (satp & ((_1 << 44) - 1)) * page_size;
+        const mode = satp >> 60;
 
         self.enable_paging = (mode == 8);
     }
@@ -84,9 +89,9 @@ pub const Cpu = struct {
 
         var levels: u16 = 3;
         var vpn = [_]u64{
-            (addr >> 12) & 0x1FF,
-            (addr >> 21) & 0x1FF,
-            (addr >> 30) & 0x1FF,
+            (addr >> 12) & 0x1ff,
+            (addr >> 21) & 0x1ff,
+            (addr >> 30) & 0x1ff,
         };
 
         var a = self.pagetable;
@@ -103,20 +108,20 @@ pub const Cpu = struct {
             if (r == true or x == true) break;
 
             i -= 1;
-            var ppn = (pte >> 10) & 0x0FFF_FFFF_FFFF;
+            var ppn = (pte >> 10) & 0x0fff_ffff_ffff;
             a = ppn * page_size;
             if (i < 0) return .{ .exception = e };
         }
 
         var ppn = [_]u64{
-            (pte >> 10) & 0x1FF,
-            (pte >> 19) & 0x1FF,
-            (pte >> 28) & 0x03FF_FFFF,
+            (pte >> 10) & 0x1ff,
+            (pte >> 19) & 0x1ff,
+            (pte >> 28) & 0x03ff_ffff,
         };
 
-        var offset = addr & 0xFF;
+        var offset = addr & 0xfff;
         return switch (i) {
-            0 => .{ .address = (((pte >> 10) & 0x0FFF_FFFF_FFFF) << 12) | offset },
+            0 => .{ .address = (((pte >> 10) & 0x0fff_ffff_ffff) << 12) | offset },
             1 => .{ .address = (ppn[2] << 30) | (ppn[1] << 21) | (vpn[0] << 12) | offset },
             2 => .{ .address = (ppn[2] << 30) | (vpn[1] << 21) | (vpn[0] << 12) | offset },
             else => .{ .exception = e },
@@ -131,19 +136,16 @@ pub const Cpu = struct {
         return .{ .instruction = self.bus.load(u32, ppc) };
     }
 
-    fn getCsr(self: *Self, addr: Csr) u64 {
-        return self.csrs[@enumToInt(addr)];
-    }
-    pub fn loadCsr(self: *Self, addr: Csr) u64 {
+    pub fn loadCsr(self: *Self, addr: u12) u64 {
         return if (addr == Csr.sie)
-            self.getCsr(Csr.mie) & self.getCsr(Csr.mideleg)
+            self.csrs[Csr.mie] & self.csrs[Csr.mideleg]
         else
-            self.getCsr(addr);
+            self.csrs[addr];
     }
-    pub fn storeCsr(self: *Self, addr: Csr, value: u64) void {
+    pub fn storeCsr(self: *Self, addr: u12, value: u64) void {
         if (addr == Csr.sie) {
-            self.csrs[@enumToInt(Csr.mie)] = (self.getCsr(Csr.mie) & ~self.getCsr(Csr.mideleg)) | (value & self.getCsr(Csr.mideleg));
-        } else self.csrs[@enumToInt(addr)] = value;
+            self.csrs[Csr.mie] = (self.csrs[Csr.mie] & ~self.csrs[Csr.mideleg]) | (value & self.csrs[Csr.mideleg]);
+        } else self.csrs[addr] = value;
     }
 
     pub fn load(self: *Self, comptime DataType: type, addr: u64) union(enum) { data: DataType, exception: Exception } {
@@ -423,8 +425,7 @@ pub const Cpu = struct {
                 self.pc += imm - 4;
             },
             0x73 => {
-                const addr = @truncate(u16, (inst & 0xfff0_0000) >> 20);
-                const csr = @intToEnum(Cpu.Csr, addr);
+                const csr = @truncate(u12, (inst & 0xfff0_0000) >> 20);
                 const rs1_u = self.regs[rs1];
                 switch (funct3) {
                     0x0 => {
@@ -636,24 +637,33 @@ pub const Cpu = struct {
 test "cpu" {
     const allocator = std.testing.allocator;
     const expect = std.testing.expect;
-    _ = expect;
 
     var code = [_]u8{0};
     var disk = [_]u8{0};
     var cpu = try Cpu.create(allocator, &code, &disk);
     defer cpu.destroy(allocator);
 
-    _ = cpu.loadCsr(Cpu.Csr.mie);
-    cpu.storeCsr(Cpu.Csr.sie, 0);
-    cpu.updatePaging(Cpu.Csr.mcause);
+    try expect(cpu.pc == Dram.dram_base);
+    try expect(cpu.regs[2] == Dram.dram_base + Dram.dram_size); // sp(x2)
+    try expect(cpu.execute(0x00004097) == null); // auipc ra, 4
+    try expect(cpu.regs[1] == 0x8000_0000); // ra(x1) == pc
+    try expect(cpu.execute(0x02a08093) == null); // addi ra, ra, 42
+    try expect(cpu.regs[1] == 0x8000_002a); // ra(x1) == pc + 42 (0x8000_002a)
+    try expect(cpu.execute(0x0040d093) == null); // srli ra, ra, 4
+    try expect(cpu.regs[1] == 0x0800_0002); // ra(x1)
+    try expect(cpu.execute(0x00409093) == null); // slli ra, ra, 4
+    try expect(cpu.regs[1] == 0x8000_0020); // ra(x1) == 0x0800_0002 << 4
+    try expect(cpu.execute(0x4040d093) == null); // srai ra, ra, 4
+    try expect(cpu.regs[1] == 0x0800_0002); // ra(x1) == (arith)0x8000_0020 >> 4
+    // std.debug.print("0x{x}\n", .{cpu.regs[1]});
+
+    // _ = cpu.loadCsr(Cpu.Csr.mie);
+    // cpu.storeCsr(Cpu.Csr.sie, 0);
+    // cpu.updatePaging(Cpu.Csr.mcause);
     // _ = cpu.translate(0, Exception.breakpoint);
     // _ = cpu.load(u64, 4242);
     // _ = cpu.store(u64, 4242, 10);
-    _ = cpu.execute(0);
-    _ = cpu.checkPendingInterrupt();
-    cpu.takeTrap(Exception.illegal_instruction, Interrupt.machine_external_interrupt);
-
-    var x: u64 = 0xFFFF_FFFF_FFFF_FFFF;
-    const xx = @bitCast(i8, @truncate(u8, x));
-    std.debug.print("0x{X}\n", .{xx});
+    // _ = cpu.execute(0);
+    // _ = cpu.checkPendingInterrupt();
+    // cpu.takeTrap(Exception.illegal_instruction, Interrupt.machine_external_interrupt);
 }
