@@ -35,7 +35,7 @@ fn runBinary(allocator: Allocator, binary: []u8, disk: []u8) !void {
                 if (exception.isFatal()) break;
             },
             .instruction => |inst| {
-                // debugCpu(cpu);
+                debugCpu(cpu);
                 cpu.pc += 4;
                 if (cpu.execute(inst)) |exception| {
                     cpu.takeTrap(exception, null);
@@ -54,11 +54,15 @@ fn runBinary(allocator: Allocator, binary: []u8, disk: []u8) !void {
 }
 
 fn debugCpu(cpu: *Cpu) void {
-    std.debug.print("pc=0x{x}, sp=0x{x}, ra=0x{x}, mode={}\n", .{
+    // std.debug.print("pc=0x{x}, ra=0x{x}, sp=0x{x}, mode={}\n", .{
+    std.debug.print("pc=0x{x}, ra=0x{x}, sp=0x{x}, x5=0x{x}, x6=0x{x}, x7=0x{x}\n", .{
         cpu.pc,
         cpu.regs[2],
         cpu.regs[1],
-        cpu.mode,
+        cpu.regs[5],
+        cpu.regs[6],
+        cpu.regs[7],
+        // cpu.mode,
     });
 }
 

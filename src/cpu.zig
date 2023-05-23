@@ -389,22 +389,22 @@ pub const Cpu = struct {
 
                 switch (funct3) {
                     0x0 => { // beq
-                        if (rs1_u == rs2_u) self.pc += imm - 4;
+                        if (rs1_u == rs2_u) self.pc = self.pc - 4 + imm;
                     },
                     0x1 => { // bne
-                        if (rs1_u != rs2_u) self.pc += imm - 4;
+                        if (rs1_u != rs2_u) self.pc = self.pc - 4 + imm;
                     },
                     0x4 => { // blt
-                        if (rs1_i < rs2_i) self.pc += imm - 4;
+                        if (rs1_i < rs2_i) self.pc = self.pc - 4 + imm;
                     },
                     0x5 => { // bge
-                        if (rs1_i >= rs2_i) self.pc += imm - 4;
+                        if (rs1_i >= rs2_i) self.pc = self.pc - 4 + imm;
                     },
                     0x6 => { // bltu
-                        if (rs1_u < rs2_u) self.pc += imm - 4;
+                        if (rs1_u < rs2_u) self.pc += self.pc - 4 + imm;
                     },
                     0x7 => { // bgeu
-                        if (rs1_u >= rs2_u) self.pc += imm - 4;
+                        if (rs1_u >= rs2_u) self.pc += self.pc - 4 + imm;
                     },
                     else => return Exception.illegal_instruction,
                 }
@@ -417,12 +417,12 @@ pub const Cpu = struct {
             },
             0x6f => { // jal
                 self.regs[rd] = self.pc;
-                const imm20 = @truncate(u20, (inst >> 12) & 0x80000);
-                const imm19_12 = @truncate(u20, (inst >> 1) & 0x7f800);
-                const imm11 = @truncate(u20, (inst >> 10) & 0x400);
-                const imm10_1 = @truncate(u20, (inst >> 21) & 0x3ff);
-                const imm = @as(u21, imm20 | imm19_12 | imm11 | imm10_1) << 1;
-                self.pc += imm - 4;
+                const imm20 = @bitCast(u32, @bitCast(i32, (inst & 0x8000_0000) >> 11));
+                const imm19_12 = inst & 0xff000;
+                const imm11 = (inst >> 9) & 0x800;
+                const imm10_1 = (inst >> 20) & 0x7fe;
+                const imm = imm20 | imm19_12 | imm11 | imm10_1;
+                self.pc = self.pc - 4 + imm;
             },
             0x73 => {
                 const csr = @truncate(u12, (inst & 0xfff0_0000) >> 20);
