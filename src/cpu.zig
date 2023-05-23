@@ -381,11 +381,11 @@ pub const Cpu = struct {
                 const rs1_i = @bitCast(i64, rs1_u);
                 const rs2_u = self.regs[rs2];
                 const rs2_i = @bitCast(i64, rs2_u);
-                const imm12 = @truncate(u12, (inst & 0x8000_0000) >> 20);
-                const imm11 = @truncate(u12, (inst & 0x80) << 3);
-                const imm4_1 = @truncate(u12, (inst >> 8) & 0xF);
-                const imm10_5 = @truncate(u12, (inst >> 25) & 0x3F);
-                const imm = @as(u13, imm12 | imm11 | imm10_5 | imm4_1) << 1;
+                const imm12 = @bitCast(u32, @bitCast(i32, (inst & 0x8000_0000) >> 19));
+                const imm11 = (inst & 0x80) << 4;
+                const imm10_5 = (inst >> 20) & 0x7e0;
+                const imm4_1 = (inst >> 7) & 0x1e;
+                const imm = imm12 | imm11 | imm10_5 | imm4_1;
 
                 switch (funct3) {
                     0x0 => { // beq

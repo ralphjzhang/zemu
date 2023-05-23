@@ -35,7 +35,7 @@ fn runBinary(allocator: Allocator, binary: []u8, disk: []u8) !void {
                 if (exception.isFatal()) break;
             },
             .instruction => |inst| {
-                debugCpu(cpu);
+                // debugCpu(cpu);
                 cpu.pc += 4;
                 if (cpu.execute(inst)) |exception| {
                     cpu.takeTrap(exception, null);
