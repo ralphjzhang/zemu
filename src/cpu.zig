@@ -133,6 +133,7 @@ pub const Cpu = struct {
             .exception => |e| return .{ .exception = e },
             .address => |addr| addr,
         };
+        // std.debug.print("ppc=0x{x}\n", .{ppc});
         return .{ .instruction = self.bus.load(u32, ppc) };
     }
 
@@ -277,6 +278,21 @@ pub const Cpu = struct {
                     else => return Exception.illegal_instruction,
                 });
             },
+            0x23 => {
+                const imm11_5 = @truncate(u12, inst >> 20);
+                const imm4_0 = @truncate(u5, (inst >> 7));
+                const imm = imm11_5 | imm4_0;
+                const addr = self.regs[rs1] + imm;
+                const rs2_u = self.regs[rs2];
+                const exception = switch (funct3) {
+                    0x0 => self.store(u8, addr, @truncate(u8, rs2_u)), // sb
+                    0x1 => self.store(u16, addr, @truncate(u16, rs2_u)), // sh
+                    0x2 => self.store(u32, addr, @truncate(u32, rs2_u)), // sw
+                    0x3 => self.store(u64, addr, rs2_u), // sd
+                    else => return Exception.illegal_instruction,
+                };
+                if (exception != null) return exception.?;
+            },
             0x2f => {
                 const funct5 = @truncate(u5, inst >> 27);
                 const rs1_u = self.regs[rs1];
@@ -412,7 +428,7 @@ pub const Cpu = struct {
             0x67 => { // jalr
                 const t = self.pc;
                 const imm = @bitCast(u32, @bitCast(i32, inst & 0xFFF0_0000) >> 20);
-                self.pc = @addWithOverflow(self.regs[rs1], imm)[0] & 0xFFFF_FFFF_FFFF_FFFE;
+                self.pc = @addWithOverflow(self.regs[rs1], imm)[0] & ~_1;
                 self.regs[rd] = t;
             },
             0x6f => { // jal

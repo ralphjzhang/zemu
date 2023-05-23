@@ -35,7 +35,7 @@ fn runBinary(allocator: Allocator, binary: []u8, disk: []u8) !void {
                 if (exception.isFatal()) break;
             },
             .instruction => |inst| {
-                // debugCpu(cpu);
+                // debugCpu(cpu, inst);
                 cpu.pc += 4;
                 if (cpu.execute(inst)) |exception| {
                     cpu.takeTrap(exception, null);
@@ -53,10 +53,12 @@ fn runBinary(allocator: Allocator, binary: []u8, disk: []u8) !void {
     cpu.dumpCsrs();
 }
 
-fn debugCpu(cpu: *Cpu) void {
+fn debugCpu(cpu: *Cpu, inst: u32) void {
     // std.debug.print("pc=0x{x}, ra=0x{x}, sp=0x{x}, mode={}\n", .{
-    std.debug.print("pc=0x{x}, ra=0x{x}, sp=0x{x}, x5=0x{x}, x6=0x{x}, x7=0x{x}\n", .{
+    if (inst == 0x6f) return; // so that j loop won't flush screen
+    std.debug.print("pc=0x{x}, inst=0x{x}, ra=0x{x}, sp=0x{x}, x5=0x{x}, x6=0x{x}, x7=0x{x}\n", .{
         cpu.pc,
+        inst,
         cpu.regs[2],
         cpu.regs[1],
         cpu.regs[5],
