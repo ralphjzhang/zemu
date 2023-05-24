@@ -24,7 +24,7 @@ pub const Dram = struct {
         const index = addr - dram_base;
         return switch (ResultType) {
             u8, u16, u32, u64 => load_impl(ResultType, self.data, index),
-            else => unreachable,
+            else => @compileError("Invalid ResultType: " ++ @typeName(ResultType)),
         };
     }
 
@@ -32,7 +32,7 @@ pub const Dram = struct {
         const index = addr - dram_base;
         return switch (ValueType) {
             u8, u16, u32, u64 => store_impl(ValueType, self.data, index, value),
-            else => unreachable,
+            else => @compileError("Invalid ValueType: " ++ @typeName(ValueType)),
         };
     }
 };

@@ -22,8 +22,10 @@ pub const Uart = struct {
     cond: std.Thread.Condition,
 
     pub fn create(allocator: Allocator) !*Self {
-        var self = try allocator.create(Self);
+        const self = try allocator.create(Self);
+        self.data = std.mem.zeroes(@TypeOf(self.data));
         self.data[lsr_addr - uart_base] |= lsr_tx;
+        self.interrupting_ = false;
         self.thread = try std.Thread.spawn(.{}, worker, .{self});
         return self;
     }
@@ -61,6 +63,7 @@ pub const Uart = struct {
                     else => return self.data[addr - uart_base],
                 }
             },
+            // else => @compileError("Invalid ResultType: " ++ @typeName(ResultType)),
             else => unreachable,
         }
     }
@@ -75,6 +78,7 @@ pub const Uart = struct {
                     else => self.data[addr - uart_base] = value & 0xFF,
                 }
             },
+            // else => @compileError("Invalid ValueType: " ++ @typeName(ValueType)),
             else => unreachable,
         }
     }

@@ -55,17 +55,19 @@ pub const Cpu = struct {
     pagetable: u64,
 
     pub fn create(allocator: Allocator, code: []u8, disk: []u8) !*Self {
-        var self = try allocator.create(Cpu);
+        const self = try allocator.create(Cpu);
         self.regs = std.mem.zeroes(@TypeOf(self.regs));
-        self.csrs = std.mem.zeroes(@TypeOf(self.csrs));
         self.regs[2] = Dram.dram_base + Dram.dram_size; // sp(x2) <- end of dram space
+        self.pc = Dram.dram_base;
+        self.csrs = std.mem.zeroes(@TypeOf(self.csrs));
+        self.mode = .machine;
         self.bus = try Bus.create(
             allocator,
             try Dram.create(allocator, code),
             try Virtio.create(allocator, disk),
         );
-        self.pc = Dram.dram_base;
-        self.mode = .machine;
+        self.enable_paging = false;
+        self.pagetable = 0;
         return self;
     }
 
@@ -242,7 +244,7 @@ pub const Cpu = struct {
                 const rs1_u = self.regs[rs1];
                 const rs1_i = @bitCast(i64, rs1_u);
                 self.regs[rd] = switch (funct3) {
-                    0x0 => rs1_u + imm_u, // addi
+                    0x0 => @bitCast(u64, rs1_i + imm_i), // addi
                     0x1 => rs1_u << shift_amt, // slli
                     0x2 => @boolToInt(rs1_i < imm_i), // slti
                     0x3 => @boolToInt(rs1_u < imm_u), // sltiu
@@ -279,8 +281,8 @@ pub const Cpu = struct {
                 });
             },
             0x23 => {
-                const imm11_5 = @truncate(u12, inst >> 20);
-                const imm4_0 = @truncate(u5, (inst >> 7));
+                const imm11_5 = @truncate(u12, (inst & 0xfe00_0000) >> 20);
+                const imm4_0 = @truncate(u5, (inst >> 7) & 0x1f);
                 const imm = imm11_5 | imm4_0;
                 const addr = self.regs[rs1] + imm;
                 const rs2_u = self.regs[rs2];
@@ -427,7 +429,7 @@ pub const Cpu = struct {
             },
             0x67 => { // jalr
                 const t = self.pc;
-                const imm = @bitCast(u32, @bitCast(i32, inst & 0xFFF0_0000) >> 20);
+                const imm = @bitCast(u32, @bitCast(i32, inst & 0xfff0_0000) >> 20);
                 self.pc = @addWithOverflow(self.regs[rs1], imm)[0] & ~_1;
                 self.regs[rd] = t;
             },

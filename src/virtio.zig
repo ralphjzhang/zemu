@@ -35,7 +35,8 @@ pub const Virtio = struct {
     disk: []u8,
 
     pub fn create(allocator: Allocator, disk: []u8) !*Self {
-        var self = try allocator.create(Self);
+        const self = try allocator.create(Self);
+        self.* = std.mem.zeroes(Self);
         self.disk = disk;
         self.queue_notify = 0xFFFF_FFFF;
         return self;
@@ -59,6 +60,7 @@ pub const Virtio = struct {
                 else => 0,
             },
             else => unreachable,
+            // else => @compileError("Invalid ResultType: " ++ @typeName(ResultType)),
         };
     }
 

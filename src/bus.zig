@@ -16,7 +16,7 @@ pub const Bus = struct {
     virtio: *Virtio,
 
     pub fn create(allocator: Allocator, dram: *Dram, virtio: *Virtio) !*Self {
-        var self = try allocator.create(Self);
+        const self = try allocator.create(Self);
         self.dram = dram;
         self.virtio = virtio;
         self.clint = try Clint.create(allocator);

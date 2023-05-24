@@ -16,7 +16,9 @@ pub const Plic = struct {
     sclaim: u64,
 
     pub fn create(allocator: Allocator) !*Self {
-        return try allocator.create(Self);
+        const self = try allocator.create(Self);
+        self.* = std.mem.zeroes(Self);
+        return self;
     }
     pub fn destroy(self: *Self, allocator: Allocator) void {
         allocator.destroy(self);
