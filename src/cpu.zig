@@ -358,8 +358,8 @@ pub const Cpu = struct {
                 } else return Exception.illegal_instruction;
             },
             0x37 => { // lui
-                const imm = @bitCast(i20, @truncate(u20, inst >> 12));
-                self.regs[rd] = @bitCast(u64, @as(i64, imm));
+                const imm = @intCast(i64, @truncate(u32, inst & 0xffff_f000));
+                self.regs[rd] = @bitCast(u64, imm);
             },
             0x3b => {
                 const rs1_u = self.regs[rs1];
